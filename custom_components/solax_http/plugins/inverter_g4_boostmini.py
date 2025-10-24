@@ -104,7 +104,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="grid_power",
         name="Grid Power",
-        index=23,
+        index=72,
         factor=1.0,
         precision=0,
         invert_sign=True,
@@ -116,8 +116,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="today_energy",
         name="Today Energy",
-        index=15,
-        factor=0.01,
+        index=21,
+        factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
