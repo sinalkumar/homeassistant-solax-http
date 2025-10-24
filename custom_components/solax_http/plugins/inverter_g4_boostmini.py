@@ -15,6 +15,7 @@ from homeassistant.const import (
 )
 
 from ..const import BaseHttpSensorEntityDescription
+from ..entity_definitions import X1
 from ..plugin_base import plugin_base
 
 SUPPORTED_TYPES = {18, 22}
@@ -237,6 +238,10 @@ class SolaxInverterG4BoostMiniPlugin(plugin_base):
             except (TypeError, ValueError):
                 self.runtime_type = None
 
+        if not self.invertertype:
+            # All supported runtime types correspond to single-phase (X1) devices.
+            self.invertertype = X1
+
         info = payload.get("Information") or []
         if not self.info_serial and len(info) > 2:
             self.info_serial = str(info[2])
@@ -307,7 +312,6 @@ def create_plugin(
         plugin.sw_version = firmware
     if info_serial:
         plugin.serialnumber = info_serial
-    plugin.invertertype = 0
     if payload:
         plugin._apply_payload(payload)
     return plugin
