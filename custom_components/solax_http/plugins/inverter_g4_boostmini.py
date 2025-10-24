@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,11 +33,65 @@ class InverterSensorDescription(BaseHttpSensorEntityDescription):
     precision: int | None = None
 
 
+def _resolve_data_value(data: Any, index: int | None) -> Any:
+    """Helper to extract a raw value from coordinator data containers."""
+
+    if index is None:
+        return None
+
+    containers: list[Any] = []
+    if isinstance(data, dict):
+        containers.append(data.get("Data"))
+        raw_payload = data.get("RawRealtimeData")
+        if isinstance(raw_payload, dict):
+            containers.append(raw_payload.get("Data"))
+
+    for container in containers:
+        if isinstance(container, dict):
+            if index in container:
+                return container.get(index)
+            str_index = str(index)
+            if str_index in container:
+                return container.get(str_index)
+        elif isinstance(container, list) and 0 <= index < len(container):
+            return container[index]
+
+    return None
+
+
+def _make_pv_power_value_function(
+    voltage_index: int,
+    current_index: int,
+    voltage_factor: float,
+    current_factor: float,
+) -> Callable[[Any, InverterSensorDescription, Any], float | int | None]:
+    """Build a value function to derive PV string power from voltage/current."""
+
+    def _value_function(raw_value: Any, descr: InverterSensorDescription, data: Any) -> float | int | None:
+        try:
+            voltage = float(raw_value) * voltage_factor
+        except (TypeError, ValueError):
+            return None
+
+        current_raw = _resolve_data_value(data, current_index)
+        if current_raw is None:
+            return None
+
+        try:
+            current = float(current_raw) * current_factor
+        except (TypeError, ValueError):
+            return None
+
+        return voltage * current
+
+    return _value_function
+
+
 SENSOR_TYPES = [
     InverterSensorDescription(
         key="ac_power",
         name="AC Power",
-        index=2,
+        index=6,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -46,9 +101,10 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_power",
         name="PV1 Power",
-        index=7,
+        index=9,
         factor=1.0,
         precision=0,
+        value_function=_make_pv_power_value_function(9, 13, 0.1, 0.1),
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -56,9 +112,10 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_power",
         name="PV2 Power",
-        index=8,
+        index=12,
         factor=1.0,
         precision=0,
+        value_function=_make_pv_power_value_function(12, 14, 0.1, 0.1),
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -66,7 +123,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="grid_power",
         name="Grid Power",
-        index=20,
+        index=22,
         factor=1.0,
         precision=0,
         invert_sign=True,
@@ -88,7 +145,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="total_energy",
         name="Total Energy",
-        index=29,
+        index=55,
         factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -108,7 +165,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_current",
         name="PV1 Current",
-        index=10,
+        index=13,
         factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.CURRENT,
@@ -118,7 +175,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_voltage",
         name="PV2 Voltage",
-        index=11,
+        index=12,
         factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
@@ -128,7 +185,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_current",
         name="PV2 Current",
-        index=12,
+        index=14,
         factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.CURRENT,
@@ -138,9 +195,9 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="inverter_temperature",
         name="Inverter Temperature",
-        index=14,
-        factor=0.1,
-        precision=1,
+        index=101,
+        factor=1.0,
+        precision=0,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
