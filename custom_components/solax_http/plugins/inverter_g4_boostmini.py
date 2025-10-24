@@ -190,7 +190,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="total_energy",
         name="Total Energy",
-        index=28,
+        index=74,
         factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
