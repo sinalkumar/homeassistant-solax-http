@@ -32,47 +32,77 @@ class InverterSensorDescription(BaseHttpSensorEntityDescription):
     precision: int | None = None
 
 
-def _iter_data_lists(source: Any) -> list[Any]:
-    """Yield possible data containers from the coordinator payload."""
+def _extract_index_value(container: Any, index: int | None) -> Any:
+    """Return the raw value stored at *index* from *container*."""
 
-    containers: list[Any] = []
+    if index is None or container is None:
+        return None
+
+    if isinstance(container, dict):
+        if index in container:
+            return container.get(index)
+        str_index = str(index)
+        if str_index in container:
+            return container.get(str_index)
+        return None
+
+    if isinstance(container, list) and 0 <= index < len(container):
+        return container[index]
+
+    return None
+
+
+def _get_container_for_source(source: Any, container_type: str) -> Any:
+    """Return the first matching container for the requested source type."""
+
+    if source is None:
+        return None
+
+    containers: list[dict[str, Any] | list[Any]] = []
+
     if isinstance(source, dict):
-        data_container = source.get("Data")
-        if data_container is not None:
-            containers.append(data_container)
-        raw = source.get("RawRealtimeData")
-        if isinstance(raw, dict):
-            raw_data = raw.get("Data")
-            if raw_data is not None:
-                containers.append(raw_data)
+        raw_payload = source.get("RawRealtimeData")
+        if isinstance(raw_payload, dict):
+            containers.append(raw_payload)
+        containers.append(source)
     elif isinstance(source, list):
         containers.append(source)
 
-    return containers
+    for candidate in containers:
+        if not isinstance(candidate, (dict, list)):
+            continue
+        if isinstance(candidate, list):
+            return candidate
+
+        match container_type.lower():
+            case "data":
+                container = candidate.get("Data")
+            case "info" | "information":
+                container = candidate.get("Information") or candidate.get("Info")
+            case "payload":
+                container = candidate
+            case _:
+                container = None
+
+        if container is not None:
+            return container
+
+    return None
 
 
 def _resolve_data_value(
     data: Any,
     last_payload: dict[str, Any] | None,
     index: int | None,
+    source: str = "Data",
 ) -> Any:
-    """Return the value for a given index from the latest payloads."""
+    """Resolve the raw value for *index* from the available payloads."""
 
-    if index is None:
-        return None
-
-    for source in (data, last_payload):
-        if not source:
-            continue
-        for container in _iter_data_lists(source):
-            if isinstance(container, dict):
-                if index in container:
-                    return container.get(index)
-                str_index = str(index)
-                if str_index in container:
-                    return container.get(str_index)
-            elif isinstance(container, list) and 0 <= index < len(container):
-                return container[index]
+    for container_source in (data, last_payload):
+        container = _get_container_for_source(container_source, source)
+        raw_value = _extract_index_value(container, index)
+        if raw_value is not None:
+            return raw_value
 
     return None
 
@@ -81,7 +111,7 @@ def _make_pv_power_function(
     current_index: int,
     current_factor: float,
 ) -> Callable[[float, InverterSensorDescription, Any, dict[str, Any] | None], float | None]:
-    """Build a value function that derives PV power from voltage/current registers."""
+    """Create a value function that derives PV power from voltage and current."""
 
     def _value_function(
         voltage: float,
@@ -89,11 +119,12 @@ def _make_pv_power_function(
         data: Any,
         last_payload: dict[str, Any] | None,
     ) -> float | None:
-        current_raw = _resolve_data_value(data, last_payload, current_index)
-        if current_raw is None:
+        raw_current = _resolve_data_value(data, last_payload, current_index)
+        if raw_current is None:
             return None
+
         try:
-            current = float(current_raw) * current_factor
+            current = float(raw_current) * current_factor
         except (TypeError, ValueError):
             return None
 
@@ -106,7 +137,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="ac_power",
         name="AC Power",
-        index=2,
+        index=3,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -127,10 +158,10 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_power",
         name="PV2 Power",
-        index=3,
+        index=13,
         factor=0.1,
         precision=0,
-        value_function=_make_pv_power_function(4, 0.01),
+        value_function=_make_pv_power_function(10, 0.1),
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -189,7 +220,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_voltage",
         name="PV2 Voltage",
-        index=3,
+        index=13,
         factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
@@ -199,9 +230,9 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_current",
         name="PV2 Current",
-        index=4,
-        factor=0.01,
-        precision=2,
+        index=10,
+        factor=0.1,
+        precision=1,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
@@ -209,7 +240,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="inverter_temperature",
         name="Inverter Temperature",
-        index=24,
+        index=23,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -240,6 +271,8 @@ class SolaxInverterG4BoostMiniPlugin(plugin_base):
         payload = None
         if isinstance(data, dict):
             payload = data.get("RawRealtimeData")
+            if not isinstance(payload, dict):
+                payload = data
         if payload:
             self._apply_payload(payload)
         elif self.initial_payload:
@@ -258,33 +291,18 @@ class SolaxInverterG4BoostMiniPlugin(plugin_base):
     def map_data(self, descr, data) -> Any:  # type: ignore[override]
         if not isinstance(descr, InverterSensorDescription):
             return None
-        payload = None
         if isinstance(data, dict):
             payload = data.get("RawRealtimeData")
-        if payload:
-            self._apply_payload(payload)
+            if not isinstance(payload, dict):
+                payload = data
+            if isinstance(payload, dict):
+                self._apply_payload(payload)
 
-        container = None
-        if isinstance(data, dict):
-            if descr.source.lower() == "data":
-                container = data.get("Data")
-            elif descr.source.lower() == "info":
-                container = data.get("Info")
-        if container is None and self._last_payload is not None:
-            if descr.source.lower() == "data":
-                container = self._last_payload.get("Data")
-            elif descr.source.lower() == "info":
-                container = self._last_payload.get("Information")
+        container = _get_container_for_source(data, descr.source)
+        if container is None:
+            container = _get_container_for_source(self._last_payload, descr.source)
 
-        raw_value = None
-        if isinstance(container, dict) and descr.index is not None:
-            raw_value = container.get(descr.index)
-            if raw_value is None:
-                raw_value = container.get(str(descr.index))
-        elif isinstance(container, list) and descr.index is not None:
-            if 0 <= descr.index < len(container):
-                raw_value = container[descr.index]
-
+        raw_value = _extract_index_value(container, descr.index)
         if raw_value is None:
             return None
 
