@@ -74,7 +74,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="ac_power",
         name="AC Power",
-        index=6,
+        index=3,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -84,7 +84,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_power",
         name="PV1 Power",
-        index=9,
+        index=13,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -94,7 +94,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_power",
         name="PV2 Power",
-        index=12,
+        index=14,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -126,8 +126,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="total_energy",
         name="Total Energy",
-        index=36,
-        factor=0.01,
+        index=19,
+        factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -136,8 +136,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_voltage",
         name="PV1 Voltage",
-        index=3,
-        factor=0.01,
+        index=4,
+        factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -146,7 +146,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_current",
         name="PV1 Current",
-        index=9,
+        index=13,
         factor=1.0,
         precision=2,
         device_class=SensorDeviceClass.CURRENT,
@@ -157,8 +157,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_voltage",
         name="PV2 Voltage",
-        index=4,
-        factor=0.01,
+        index=5,
+        factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -167,7 +167,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_current",
         name="PV2 Current",
-        index=12,
+        index=14,
         factor=1.0,
         precision=2,
         device_class=SensorDeviceClass.CURRENT,
@@ -178,8 +178,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="inverter_temperature",
         name="Inverter Temperature",
-        index=55,
-        factor=0.1,
+        index=76,
+        factor=0.01,
         precision=1,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -190,11 +190,11 @@ SENSOR_TYPES = [
 for sensor in SENSOR_TYPES:
     if sensor.key == "pv1_current":
         sensor.value_function = partial(
-            _compute_pv_current, voltage_index=3
+            _compute_pv_current, voltage_index=4
         )
     elif sensor.key == "pv2_current":
         sensor.value_function = partial(
-            _compute_pv_current, voltage_index=4
+            _compute_pv_current, voltage_index=5
         )
 
 
