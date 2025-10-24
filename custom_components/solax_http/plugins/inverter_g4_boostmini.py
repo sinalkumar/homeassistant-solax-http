@@ -33,7 +33,9 @@ class InverterSensorDescription(BaseHttpSensorEntityDescription):
     precision: int | None = None
 
 
-def _compute_pv_current(raw_value, descr, data, *, voltage_index: int) -> float | None:
+def _compute_pv_current(
+    raw_value, descr, data, *, voltage_index: int, voltage_factor: float
+) -> float | None:
     """Calculate PV string current from reported power and voltage."""
 
     if raw_value in (None, ""):
@@ -57,7 +59,7 @@ def _compute_pv_current(raw_value, descr, data, *, voltage_index: int) -> float 
 
     try:
         power = float(raw_value)
-        voltage = float(voltage_raw) * 0.01
+        voltage = float(voltage_raw) * voltage_factor
     except (TypeError, ValueError):
         return None
 
@@ -190,11 +192,11 @@ SENSOR_TYPES = [
 for sensor in SENSOR_TYPES:
     if sensor.key == "pv1_current":
         sensor.value_function = partial(
-            _compute_pv_current, voltage_index=4
+            _compute_pv_current, voltage_index=4, voltage_factor=0.1
         )
     elif sensor.key == "pv2_current":
         sensor.value_function = partial(
-            _compute_pv_current, voltage_index=5
+            _compute_pv_current, voltage_index=5, voltage_factor=0.1
         )
 
 
