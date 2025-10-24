@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
@@ -14,7 +15,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 
-from ..const import BaseHttpSensorEntityDescription
+from ..const import BaseHttpSensorEntityDescription, S16
 from ..entity_definitions import X1
 from ..plugin_base import plugin_base
 
@@ -32,11 +33,48 @@ class InverterSensorDescription(BaseHttpSensorEntityDescription):
     precision: int | None = None
 
 
+def _compute_pv_current(raw_value, descr, data, *, voltage_index: int) -> float | None:
+    """Calculate PV string current from reported power and voltage."""
+
+    if raw_value in (None, ""):
+        return None
+
+    container = None
+    if isinstance(data, dict):
+        container = data.get("Data")
+    if container is None:
+        return None
+
+    if isinstance(container, dict):
+        voltage_raw = container.get(voltage_index)
+    elif isinstance(container, list):
+        if 0 <= voltage_index < len(container):
+            voltage_raw = container[voltage_index]
+        else:
+            return None
+    else:
+        return None
+
+    try:
+        power = float(raw_value)
+        voltage = float(voltage_raw) * 0.01
+    except (TypeError, ValueError):
+        return None
+
+    if voltage == 0:
+        return 0.0
+
+    current = power / voltage
+    if descr.precision is not None:
+        return round(current, descr.precision)
+    return current
+
+
 SENSOR_TYPES = [
     InverterSensorDescription(
         key="ac_power",
         name="AC Power",
-        index=2,
+        index=6,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -46,7 +84,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_power",
         name="PV1 Power",
-        index=7,
+        index=9,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -56,7 +94,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv2_power",
         name="PV2 Power",
-        index=8,
+        index=12,
         factor=1.0,
         precision=0,
         device_class=SensorDeviceClass.POWER,
@@ -66,10 +104,11 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="grid_power",
         name="Grid Power",
-        index=20,
+        index=23,
         factor=1.0,
         precision=0,
         invert_sign=True,
+        unit=S16,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -77,7 +116,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="today_energy",
         name="Today Energy",
-        index=21,
+        index=15,
         factor=0.01,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -87,7 +126,7 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="total_energy",
         name="Total Energy",
-        index=29,
+        index=36,
         factor=0.01,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -97,8 +136,8 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_voltage",
         name="PV1 Voltage",
-        index=9,
-        factor=0.1,
+        index=3,
+        factor=0.01,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -107,18 +146,19 @@ SENSOR_TYPES = [
     InverterSensorDescription(
         key="pv1_current",
         name="PV1 Current",
-        index=10,
-        factor=0.1,
-        precision=1,
+        index=9,
+        factor=1.0,
+        precision=2,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_function=None,
     ),
     InverterSensorDescription(
         key="pv2_voltage",
         name="PV2 Voltage",
-        index=11,
-        factor=0.1,
+        index=4,
+        factor=0.01,
         precision=1,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -128,16 +168,17 @@ SENSOR_TYPES = [
         key="pv2_current",
         name="PV2 Current",
         index=12,
-        factor=0.1,
-        precision=1,
+        factor=1.0,
+        precision=2,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_function=None,
     ),
     InverterSensorDescription(
         key="inverter_temperature",
         name="Inverter Temperature",
-        index=14,
+        index=55,
         factor=0.1,
         precision=1,
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -145,6 +186,16 @@ SENSOR_TYPES = [
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
     ),
 ]
+
+for sensor in SENSOR_TYPES:
+    if sensor.key == "pv1_current":
+        sensor.value_function = partial(
+            _compute_pv_current, voltage_index=3
+        )
+    elif sensor.key == "pv2_current":
+        sensor.value_function = partial(
+            _compute_pv_current, voltage_index=4
+        )
 
 
 @dataclass
@@ -214,10 +265,24 @@ class SolaxInverterG4BoostMiniPlugin(plugin_base):
         if raw_value is None:
             return None
 
-        try:
-            value = float(raw_value) * descr.factor
-        except (TypeError, ValueError):
-            return None
+        if descr.unit == S16:
+            try:
+                raw_value_int = int(raw_value)
+            except (TypeError, ValueError):
+                return None
+            if raw_value_int >= 0x8000:
+                raw_value_int -= 0x10000
+            raw_value = raw_value_int
+
+        if descr.value_function is not None:
+            value = descr.value_function(raw_value, descr, data)
+            if value is None:
+                return None
+        else:
+            try:
+                value = float(raw_value) * descr.factor
+            except (TypeError, ValueError):
+                return None
 
         if descr.invert_sign:
             value *= -1
