@@ -31,6 +31,7 @@ class plugin_base:
     serialnumber: str = ""
     hw_version: str = "Unknown"
     sw_version: str = "Unknown"
+    supports_set_data: bool = True
 
     async def initialize(self) -> None:
         pass

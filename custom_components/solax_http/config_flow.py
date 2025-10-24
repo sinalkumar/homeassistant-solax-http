@@ -5,11 +5,7 @@ from typing import Any, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_NAME,
-    CONF_SCAN_INTERVAL,
-)
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.helpers.schema_config_entry_flow import (
     SchemaCommonFlowHandler,
     SchemaConfigFlowHandler,
@@ -19,10 +15,13 @@ from homeassistant.helpers.schema_config_entry_flow import (
 )
 
 from .const import (
+    CONF_DEVICE_SERIAL,
+    CONF_SN,
+    CONF_USE_X_FORWARDED_FOR,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_USE_X_FORWARDED_FOR,
     DOMAIN,
-    CONF_SN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,9 +32,11 @@ CONFIG_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_SN): vol.All(
-            str, vol.Length(max=10, msg="invalid_sn_length")
-        ),
+        vol.Required(CONF_SN): vol.All(str, vol.Length(min=1, max=32)),
+        vol.Optional(CONF_DEVICE_SERIAL): str,
+        vol.Optional(
+            CONF_USE_X_FORWARDED_FOR, default=DEFAULT_USE_X_FORWARDED_FOR
+        ): bool,
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
     }
 )
@@ -43,7 +44,11 @@ CONFIG_SCHEMA = vol.Schema(
 OPTION_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Required(CONF_SN): vol.All(str, vol.Length(max=10)),
+        vol.Required(CONF_SN): vol.All(str, vol.Length(min=1, max=32)),
+        vol.Optional(CONF_DEVICE_SERIAL): str,
+        vol.Optional(
+            CONF_USE_X_FORWARDED_FOR, default=DEFAULT_USE_X_FORWARDED_FOR
+        ): bool,
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
     }
 )

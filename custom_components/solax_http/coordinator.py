@@ -20,7 +20,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import (
     API_TIMEOUT,
     CONF_SN,
+    CONF_USE_X_FORWARDED_FOR,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_USE_X_FORWARDED_FOR,
     DOMAIN,
     REQUEST_REFRESH_DELAY,
 )
@@ -49,12 +51,19 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
         """Initialize Solax Http API data updater."""
 
         _LOGGER.debug("Setting up coordinator")
-        self._host = config.options.get(CONF_HOST, None)
-        self._sn = config.options.get(CONF_SN, None)
+        merged_config = {**config.data, **config.options}
+        self._host = merged_config.get(CONF_HOST)
+        self._registration = merged_config.get(CONF_SN)
+        self._use_xff = merged_config.get(
+            CONF_USE_X_FORWARDED_FOR, DEFAULT_USE_X_FORWARDED_FOR
+        )
+        if not self._host or not self._registration:
+            raise ValueError("Incomplete SolaX HTTP configuration")
+        self._registration = str(self._registration)
         self.plugin = plugin
         self.session = session
 
-        scan_interval = config.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        scan_interval = merged_config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
             hass,
@@ -96,9 +105,9 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
         # data retrieved from API.
         try:
             realtimeData = await self._read_realtime_data()
-            setData = await self._read_set_data()
-            if setData is None:
-                setData = []
+            setData = []
+            if self.plugin.supports_set_data:
+                setData = await self._read_set_data() or []
             if realtimeData is None:
                 realtimeData = {"Data": [], "Information": []}
         except Exception:
@@ -106,14 +115,17 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
 
         return {
             "Set": dict(enumerate(setData)),
-            "Data": dict(enumerate(realtimeData["Data"])),
-            "Info": dict(enumerate(realtimeData["Information"])),
+            "Data": dict(enumerate(realtimeData.get("Data", []))),
+            "Info": dict(enumerate(realtimeData.get("Information", []))),
+            "RawRealtimeData": realtimeData,
+            "RawSetData": setData,
         }
 
     async def _read_realtime_data(self):
         httpData = None
         text = await self._http_post(
-            f"http://{self._host}", f"optType=ReadRealTimeData&pwd={self._sn}"
+            f"http://{self._host}",
+            f"optType=ReadRealTimeData&pwd={self._registration}",
         )
         if text is None:
             return None
@@ -141,7 +153,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
 
         resp = await self._http_post(
             f"http://{self._host}",
-            f'optType=setReg&pwd={self._sn}&data={{"num":1,"Data":{json.dumps(payload)}}}',
+            f'optType=setReg&pwd={self._registration}&data={{"num":1,"Data":{json.dumps(payload)}}}',
         )
         if resp is not None:
             _LOGGER.debug("Received HTTP API response %s", resp)
@@ -153,7 +165,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
     async def _read_set_data(self):
         setData = None
         text = await self._http_post(
-            f"http://{self._host}", f"optType=ReadSetData&pwd={self._sn}"
+            f"http://{self._host}", f"optType=ReadSetData&pwd={self._registration}"
         )
         if text is None:
             _LOGGER.warning("Received empty Set data from http")
@@ -167,9 +179,16 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
             _LOGGER.error("Failed to decode Set json: %s", text)
         return setData
 
-    async def _http_post(self, url, payload, retry=3):
+    async def _http_post(self, url, payload, retry=3, headers=None):
         try:
-            async with self.session.post(url, data=payload) as resp:
+            request_headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+            }
+            if headers:
+                request_headers.update(headers)
+            if self._use_xff:
+                request_headers.setdefault("X-Forwarded-For", "5.8.8.8")
+            async with self.session.post(url, data=payload, headers=request_headers) as resp:
                 if resp.status == 200:
                     return await resp.text()
         except TimeoutError:

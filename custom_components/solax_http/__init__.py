@@ -27,14 +27,14 @@ async def async_setup(hass, config):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up a SolaX Http."""
     _LOGGER.debug("setup entries - data: %s, options: %s", entry.data, entry.options)
-    config = entry.options
+    config = {**entry.data, **entry.options}
     name = config[CONF_NAME]
 
     _LOGGER.debug("Setup %s.%s", DOMAIN, name)
 
-    plugin = await PluginFactory.get_plugin_instance(config[CONF_HOST], config[CONF_SN])
+    plugin = await PluginFactory.get_plugin_instance(config)
     plugin.device_info = {
-        "identifiers": {(DOMAIN, name, plugin.serialnumber)},
+        "identifiers": {(DOMAIN, name, plugin.serialnumber or config.get(CONF_SN))},
         "name": name,
         "manufacturer": ATTR_MANUFACTURER,
         "model": plugin.inverter_model,

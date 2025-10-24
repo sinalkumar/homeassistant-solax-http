@@ -14,7 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities) -> None:
-    name = entry.options[CONF_NAME]
+    config = {**entry.data, **entry.options}
+    name = config[CONF_NAME]
     coordinator: SolaxHttpUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     plugin: plugin_base = coordinator.plugin
 

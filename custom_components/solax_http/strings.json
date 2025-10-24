@@ -6,11 +6,15 @@
         "data": {
           "name": "The prefix to be used for sensors",
           "host": "The IP-address of your SolaX in LAN",
-          "serial_number": "EV Charger API password (default is Reg.No.)",
+          "serial_number": "Registration number / API password",
+          "device_serial": "Device serial number (optional)",
+          "use_x_forwarded_for": "Send X-Forwarded-For compatibility header",
           "scan_interval": "The polling frequency of the Http API in seconds"
         },
         "data_description": {
-          "serial_number": "API allows maximum 10 characters. Change the password if you use longer."
+          "serial_number": "This is the registration number shown in the local web UI.",
+          "device_serial": "Optional long-form serial, e.g. XB4050L...",
+          "use_x_forwarded_for": "Disable only if your dongle rejects requests with this header."
         }
       }
     },
@@ -30,11 +34,15 @@
         "data": {
           "name": "The prefix to be used for sensors",
           "host": "The IP-address of your SolaX in LAN",
-          "serial_number": "EV Charger API password (default is Reg.No.)",
+          "serial_number": "Registration number / API password",
+          "device_serial": "Device serial number (optional)",
+          "use_x_forwarded_for": "Send X-Forwarded-For compatibility header",
           "scan_interval": "The polling frequency of the Http API in seconds"
         },
         "data_description": {
-          "serial_number": "API allows maximum 10 characters. Change the password if you use longer."
+          "serial_number": "This is the registration number shown in the local web UI.",
+          "device_serial": "Optional long-form serial, e.g. XB4050L...",
+          "use_x_forwarded_for": "Disable only if your dongle rejects requests with this header."
         }
       }
     },
