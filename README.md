@@ -12,6 +12,13 @@ Please write only issues specific to Http API here.
 All other stuff is common and should be discussed in https://github.com/wills106/homeassistant-solax-modbus
 
 # Supported devices
+## X1 Boost / X1 Mini G4 inverters (local HTTP)
+* Tested with WiFi/LAN v2 dongles that expose the `ReadRealTimeData` endpoint.
+* Provide the inverter registration number (the local web UI password) in the configuration flow.
+* Optionally enter the long-form serial (e.g. `XB4050...`) for display purposes.
+* The integration can send an `X-Forwarded-For: 5.8.8.8` header by default – disable this option only if your dongle rejects the request.
+* Exposes AC power, PV input power, grid power, inverter temperature and lifetime/today energy sensors compatible with the Home Assistant Energy dashboard.
+
 ## G1 SolaX EV Charger X3 is supported.
 
 ## G2 SolaX Smart EV Charger HEC is supported.

@@ -15,10 +15,13 @@ ATTR_MANUFACTURER = "SolaX Power"
 
 DEFAULT_NAME = "SolaX API"
 DEFAULT_SCAN_INTERVAL = 15
+DEFAULT_USE_X_FORWARDED_FOR = True
 REQUEST_REFRESH_DELAY = 0.3
 API_TIMEOUT = 10
 
 CONF_SN = "serial_number"
+CONF_DEVICE_SERIAL = "device_serial"
+CONF_USE_X_FORWARDED_FOR = "use_x_forwarded_for"
 
 U16 = "_uint16"
 U32 = "_uint32"
