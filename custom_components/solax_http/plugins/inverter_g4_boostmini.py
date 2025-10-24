@@ -14,7 +14,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 
-from ..const import BaseHttpSensorEntityDescription
+from ..const import BaseHttpSensorEntityDescription, S16
 from ..entity_definitions import X1
 from ..plugin_base import plugin_base
 
@@ -70,6 +70,7 @@ SENSOR_TYPES = [
         factor=1.0,
         precision=0,
         invert_sign=True,
+        unit=S16,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -78,7 +79,7 @@ SENSOR_TYPES = [
         key="today_energy",
         name="Today Energy",
         index=21,
-        factor=0.01,
+        factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -88,7 +89,7 @@ SENSOR_TYPES = [
         key="total_energy",
         name="Total Energy",
         index=29,
-        factor=0.01,
+        factor=0.1,
         precision=2,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -214,10 +215,24 @@ class SolaxInverterG4BoostMiniPlugin(plugin_base):
         if raw_value is None:
             return None
 
-        try:
-            value = float(raw_value) * descr.factor
-        except (TypeError, ValueError):
-            return None
+        if descr.unit == S16:
+            try:
+                raw_value_int = int(raw_value)
+            except (TypeError, ValueError):
+                return None
+            if raw_value_int >= 0x8000:
+                raw_value_int -= 0x10000
+            raw_value = raw_value_int
+
+        if descr.value_function is not None:
+            value = descr.value_function(raw_value, descr, data)
+            if value is None:
+                return None
+        else:
+            try:
+                value = float(raw_value) * descr.factor
+            except (TypeError, ValueError):
+                return None
 
         if descr.invert_sign:
             value *= -1
