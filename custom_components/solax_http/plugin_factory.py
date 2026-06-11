@@ -33,6 +33,7 @@ from .entity_definitions import (
     X1,
     X3,
 )
+from .http_utils import endpoint_urls
 from .plugin_solax_ev_charger import solax_ev_charger_plugin
 from .plugin_solax_ev_charger_g2 import solax_ev_charger_plugin_g2
 from .plugins.inverter_g4_boostmini import (
@@ -71,8 +72,11 @@ class PluginFactory:
             connector = aiohttp.TCPConnector(force_close=True)
             async with aiohttp.ClientSession(connector=connector) as session:
                 async with async_timeout.timeout(10):
+                    kwargs: dict[str, Any] = {}
+                    if url.startswith("https://"):
+                        kwargs["ssl"] = False
                     async with session.post(
-                        url, data=payload, headers=request_headers
+                        url, data=payload, headers=request_headers, **kwargs
                     ) as resp:
                         if resp.status == 200:
                             return await resp.text()
@@ -127,20 +131,21 @@ class PluginFactory:
     async def _read_runtime_payload(
         host: str, pwd: str, use_x_forwarded_for: bool
     ) -> dict[str, Any] | None:
-        text = await PluginFactory._http_post(
-            f"http://{host}",
-            f"optType=ReadRealTimeData&pwd={pwd}",
-            use_x_forwarded_for=use_x_forwarded_for,
-        )
-        if text is None:
-            return None
-        if "failed" in text:
-            _LOGGER.error("Failed to read data from http: %s", text)
-            return None
-        try:
-            return json.loads(text)
-        except json.decoder.JSONDecodeError:
-            _LOGGER.error("Failed to decode json: %s", text)
+        for url in endpoint_urls(host):
+            text = await PluginFactory._http_post(
+                url,
+                f"optType=ReadRealTimeData&pwd={pwd}",
+                use_x_forwarded_for=use_x_forwarded_for,
+            )
+            if text is None:
+                continue
+            if "failed" in text:
+                _LOGGER.error("Failed to read data from %s: %s", url, text)
+                continue
+            try:
+                return json.loads(text)
+            except json.decoder.JSONDecodeError:
+                _LOGGER.error("Failed to decode json from %s: %s", url, text)
         return None
 
     @staticmethod
@@ -168,7 +173,7 @@ class PluginFactory:
                 invertertype |= POW22
         elif sn.startswith("50"):  # G2 HEC
             invertertype = V20
-            if len(sn) > 2 and sn[2] == "3":
+            if len(sn) > 2 and sn[2] in {"3", "7"}:
                 invertertype |= X3
             elif len(sn) > 2 and sn[2] == "2":
                 invertertype |= X1

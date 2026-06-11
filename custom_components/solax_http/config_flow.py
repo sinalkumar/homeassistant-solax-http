@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_USE_X_FORWARDED_FOR,
     DOMAIN,
 )
+from .http_utils import host_for_resolution
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ OPTION_SCHEMA = vol.Schema(
 
 
 async def _validate_host(handler: SchemaCommonFlowHandler, user_input: Any) -> Any:
-    host = user_input[CONF_HOST]
+    host = host_for_resolution(user_input[CONF_HOST])
     try:
         socket.gethostbyname(host)
     except Exception as e:

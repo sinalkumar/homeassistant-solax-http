@@ -26,6 +26,7 @@ from .const import (
     DOMAIN,
     REQUEST_REFRESH_DELAY,
 )
+from .http_utils import endpoint_urls
 from .plugin_base import plugin_base
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
         _LOGGER.debug("Setting up coordinator")
         merged_config = {**config.data, **config.options}
         self._host = merged_config.get(CONF_HOST)
+        self._endpoint_urls = endpoint_urls(self._host) if self._host else []
         self._registration = merged_config.get(CONF_SN)
         self._use_xff = merged_config.get(
             CONF_USE_X_FORWARDED_FOR, DEFAULT_USE_X_FORWARDED_FOR
@@ -123,8 +125,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
 
     async def _read_realtime_data(self):
         httpData = None
-        text = await self._http_post(
-            f"http://{self._host}",
+        text = await self._http_post_any_endpoint(
             f"optType=ReadRealTimeData&pwd={self._registration}",
         )
         if text is None:
@@ -151,8 +152,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
             if current_value == value:
                 return
 
-        resp = await self._http_post(
-            f"http://{self._host}",
+        resp = await self._http_post_any_endpoint(
             f'optType=setReg&pwd={self._registration}&data={{"num":1,"Data":{json.dumps(payload)}}}',
         )
         if resp is not None:
@@ -164,8 +164,8 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
 
     async def _read_set_data(self):
         setData = None
-        text = await self._http_post(
-            f"http://{self._host}", f"optType=ReadSetData&pwd={self._registration}"
+        text = await self._http_post_any_endpoint(
+            f"optType=ReadSetData&pwd={self._registration}"
         )
         if text is None:
             _LOGGER.warning("Received empty Set data from http")
@@ -179,6 +179,13 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
             _LOGGER.error("Failed to decode Set json: %s", text)
         return setData
 
+    async def _http_post_any_endpoint(self, payload, headers=None):
+        for url in self._endpoint_urls:
+            text = await self._http_post(url, payload, headers=headers)
+            if text is not None and "failed" not in text:
+                return text
+        return None
+
     async def _http_post(self, url, payload, retry=3, headers=None):
         try:
             request_headers = {
@@ -188,24 +195,29 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
                 request_headers.update(headers)
             if self._use_xff:
                 request_headers.setdefault("X-Forwarded-For", "5.8.8.8")
-            async with self.session.post(url, data=payload, headers=request_headers) as resp:
+            kwargs = {}
+            if url.startswith("https://"):
+                kwargs["ssl"] = False
+            async with self.session.post(
+                url, data=payload, headers=request_headers, **kwargs
+            ) as resp:
                 if resp.status == 200:
                     return await resp.text()
         except TimeoutError:
             if retry > 0:
-                return await self._http_post(url, payload, retry - 1)
+                return await self._http_post(url, payload, retry - 1, headers=headers)
             _LOGGER.error("Timeout error reading from Http. Url: %s", url)
         except aiohttp.ServerDisconnectedError:
             if retry:
-                return await self._http_post(url, payload, retry - 1)
+                return await self._http_post(url, payload, retry - 1, headers=headers)
             _LOGGER.error("Server disconnected error reading from Http. Url: %s", url)
         except aiohttp.client_exceptions.ClientOSError:
             if retry > 0:
-                return await self._http_post(url, payload, retry - 1)
+                return await self._http_post(url, payload, retry - 1, headers=headers)
             _LOGGER.error("ClientOSError reading from Http. Url: %s", url)
         except aiohttp.ClientError as err:
             if retry:
-                return await self._http_post(url, payload, retry - 1)
+                return await self._http_post(url, payload, retry - 1, headers=headers)
             _LOGGER.error("ClientError reading from Http. Url: %s", url)
         except Exception as ex:
             _LOGGER.exception("Error reading from Http. Url: %s", url, exc_info=ex)
