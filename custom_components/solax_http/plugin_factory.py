@@ -62,6 +62,7 @@ class PluginFactory:
     ) -> str | None:
         request_headers: dict[str, str] = {
             "Content-Type": "application/x-www-form-urlencoded",
+            "Connection": "close",
         }
         if headers:
             request_headers.update(headers)

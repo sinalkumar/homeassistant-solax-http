@@ -190,6 +190,7 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
         try:
             request_headers = {
                 "Content-Type": "application/x-www-form-urlencoded",
+                "Connection": "close",
             }
             if headers:
                 request_headers.update(headers)

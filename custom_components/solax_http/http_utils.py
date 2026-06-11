@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 
 def endpoint_urls(host: str) -> list[str]:
@@ -10,7 +10,9 @@ def endpoint_urls(host: str) -> list[str]:
     value = str(host).strip().rstrip("/")
     parsed = urlparse(value)
     if parsed.scheme in {"http", "https"}:
-        return [value]
+        fallback_scheme = "https" if parsed.scheme == "http" else "http"
+        fallback = urlunparse(parsed._replace(scheme=fallback_scheme))
+        return [value, fallback]
 
     return [f"http://{value}", f"https://{value}"]
 
