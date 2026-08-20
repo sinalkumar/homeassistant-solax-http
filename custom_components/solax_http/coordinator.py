@@ -105,15 +105,13 @@ class SolaxHttpUpdateCoordinator(DataUpdateCoordinator[None]):
         # Grab active context variables to limit data required to be fetched from API
         # Note: using context is not required if there is no need or ability to limit
         # data retrieved from API.
-        try:
-            realtimeData = await self._read_realtime_data()
-            setData = []
-            if self.plugin.supports_set_data:
-                setData = await self._read_set_data() or []
-            if realtimeData is None:
-                realtimeData = {"Data": [], "Information": []}
-        except Exception:
-            _LOGGER.exception("Something went wrong reading from Http API")
+        realtimeData = await self._read_realtime_data()
+        if not isinstance(realtimeData, dict):
+            raise SolaXApiError("Realtime data was empty or invalid")
+
+        setData = []
+        if self.plugin.supports_set_data:
+            setData = await self._read_set_data() or []
 
         return {
             "Set": dict(enumerate(setData)),
